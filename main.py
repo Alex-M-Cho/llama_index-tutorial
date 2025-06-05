@@ -10,6 +10,7 @@ from llama_index.core.query_pipeline import QueryPipeline
 from code_reader import code_reader
 from prompts import context, code_parser_template
 import ast
+import os
 from dotenv import load_dotenv
 
 
@@ -60,9 +61,21 @@ json_prompt_template = PromptTemplate(json_prompt_str)
 output_pipleline = QueryPipeline(chain=[json_prompt_template, code_llm])
 
 while (prompt := input("Enter a prompt (q to quit): ")) !="q":
-    result = agent.query(prompt)
-    next_result = output_pipleline.run(response=result)
-    cleaned_json = ast.literal_eval(str(next_result).replace("assistant:", ""))
+
+    retires = 0
+    while retires < 3:
+        try:
+            result = agent.query(prompt)
+            next_result = output_pipleline.run(response=result)
+            cleaned_json = ast.literal_eval(str(next_result).replace("assistant:", ""))
+            break
+        except Exception as e:
+            retires += 1
+            print(f"Error occured, retry #{retires}: {e}")
+
+    if retires >= 3:
+        print("Failed to generate code after 3 retries. Please try again.")
+        continue
 
     print("Code generated successfully")
     print(cleaned_json["code"])
@@ -71,9 +84,12 @@ while (prompt := input("Enter a prompt (q to quit): ")) !="q":
 
     filename = cleaned_json["filename"]
 
-    
-
-
+    try:
+        with open(os.path.join("output", filename), "w") as f:
+            f.write(cleaned_json["code"])
+        print(f"Saved file successfully {filename}")
+    except Exception as e:
+        print(f"Error saving file: {e}")
     
 
 
