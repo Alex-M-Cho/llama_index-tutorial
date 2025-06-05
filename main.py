@@ -4,9 +4,12 @@ from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, PromptTemp
 from llama_index.core.embeddings import resolve_embed_model
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core.agent import ReActAgent
+from pydantic import BaseModel
+from llama_index.core.output_parsers import PydanticOutputParser
+from llama_index.core.query_pipeline import QueryPipeline
 from code_reader import code_reader
-from prompts import context
-
+from prompts import context, code_parser_template
+import ast
 from dotenv import load_dotenv
 
 
@@ -43,9 +46,35 @@ code_llm = Ollama(model="codellama")
 
 agent = ReActAgent.from_tools(tools, llm=code_llm, verbose=True, context=context)
 
+class CodeOutput(BaseModel):
+    code: str
+    description: str
+    filename: str
+
+parser = PydanticOutputParser(CodeOutput)
+
+json_prompt_str = parser.format(code_parser_template)
+
+json_prompt_template = PromptTemplate(json_prompt_str)
+
+output_pipleline = QueryPipeline(chain=[json_prompt_template, code_llm])
+
 while (prompt := input("Enter a prompt (q to quit): ")) !="q":
     result = agent.query(prompt)
-    print(result)
+    next_result = output_pipleline.run(response=result)
+    cleaned_json = ast.literal_eval(str(next_result).replace("assistant:", ""))
+
+    print("Code generated successfully")
+    print(cleaned_json["code"])
+
+    print("\n\n Description:", cleaned_json["description"])
+
+    filename = cleaned_json["filename"]
+
+    
+
+
+    
 
 
 
